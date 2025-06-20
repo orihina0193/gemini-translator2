@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemini JSON Translator</title>
+</head>
+<body>
+    <script>
+        async function translateText() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const textToTranslate = urlParams.get('text');
+            const apiKey = urlParams.get('key');
+
+            if (!textToTranslate || !apiKey) {
+                // エラー時のフィードバック強化: パラメータ不足の場合
+                document.body.textContent = JSON.stringify({ error: "パラメータ不足: 翻訳テキストまたはAPIキーが指定されていません。", example: "https://your-github-page.com/translator.html?text=Hello&key=YOUR_API_KEY" });
+                return;
+            }
+
+            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+
+            const requestBody = {
+                contents: [
+                    {
+                        role: "user",
+                        parts: [
+                            {
+                                // 汎用的な「お願い」のプロンプト
+                                text: "以下のテキストを日本語に翻訳してください。翻訳されたテキストのみを返してください。必要に応じて、文脈を考慮して自然な表現にしてください。前置きや結びの言葉、解説、注意書き、補足情報は一切含めないでください。\n\n" + textToTranslate
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            try {
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(requestBody)
+                });
+
+                if (!response.ok) {
+                    // エラー時のフィードバック強化: HTTPエラーの場合
+                    const errorData = await response.json().catch(() => ({})); // エラーレスポンスがJSONでない場合も考慮
+                    throw new Error(`APIエラー (${response.status}): ${errorData.error ? errorData.error.message : '不明なエラー'}`);
+                }
+
+                const data = await response.json();
+
+                let translatedText = "翻訳できませんでした。";
+                if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates.length > 0) {
+                    translatedText = data.candidates[0].content.parts[0].text;
+                } else {
+                    // エラー時のフィードバック強化: 翻訳結果が空の場合
+                    translatedText = "翻訳結果が空でした。元のテキストを確認してください。";
+                }
+                
+                document.body.textContent = JSON.stringify({ translation: translatedText });
+
+            } catch (error) {
+                // エラー時のフィードバック強化: 全般的なエラーの場合
+                document.body.textContent = JSON.stringify({ error: `翻訳処理中にエラーが発生しました: ${error.message}` });
+            }
+        }
+
+        translateText();
+    </script>
+</body>
+</html>
