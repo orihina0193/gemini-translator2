@@ -3,71 +3,80 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Gemini JSON Translator</title>
+    <title>Gemini Flash Auto-Select</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; padding: 20px; max-width: 700px; margin: auto; background: #f9f9f9; }
+        textarea { width: 100%; height: 120px; border-radius: 10px; border: 1px solid #ccc; padding: 10px; font-size: 16px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #007aff; color: white; border: none; border-radius: 10px; font-size: 16px; cursor: pointer; margin-top: 10px; }
+        #status { font-size: 12px; color: #666; margin: 10px 0; }
+        #result { background: white; padding: 15px; border-radius: 10px; border: 1px solid #eee; white-space: pre-wrap; min-height: 50px; margin-top: 15px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+    </style>
 </head>
 <body>
+    <h3>Gemini 翻訳 (Auto Flash)</h3>
+    <div id="status">APIキーを確認中...</div>
+    <textarea id="input" placeholder="翻訳したい文章をここに..."></textarea>
+    <button onclick="translateText()">翻訳実行</button>
+    <div id="result"></div>
+
     <script>
-        async function translateText() {
-            const urlParams = new URLSearchParams(window.location.search);
-            const textToTranslate = urlParams.get('text');
-            const apiKey = urlParams.get('key');
+        const urlParams = new URLSearchParams(window.location.search);
+        const apiKey = urlParams.get('key');
+        const statusDiv = document.getElementById('status');
 
-            if (!textToTranslate || !apiKey) {
-                // エラー時のフィードバック強化: パラメータ不足の場合
-                document.body.textContent = JSON.stringify({ error: "パラメータ不足: 翻訳テキストまたはAPIキーが指定されていません。", example: "https://your-github-page.com/translator.html?text=Hello&key=YOUR_API_KEY" });
-                return;
-            }
+        if (!apiKey) {
+            statusDiv.innerHTML = "<b style='color:red;'>APIキーがありません。URL末尾に ?key=YOUR_KEY を付けてください。</b>";
+        } else {
+            statusDiv.textContent = "準備完了（モデルは実行時に自動選別されます）";
+        }
 
-            const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-            const requestBody = {
-                contents: [
-                    {
-                        role: "user",
-                        parts: [
-                            {
-                                // 汎用的な「お願い」のプロンプト
-                                text: "以下のテキストを日本語に翻訳してください。翻訳されたテキストのみを返してください。必要に応じて、文脈を考慮して自然な表現にしてください。前置きや結びの言葉、解説、注意書き、補足情報は一切含めないでください。\n\n" + textToTranslate
-                            }
-                        ]
-                    }
-                ]
-            };
-
+        async function getBestModel() {
             try {
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(requestBody)
-                });
+                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                const data = await res.json();
+                const models = data.models.map(m => m.name.replace('models/', ''));
 
-                if (!response.ok) {
-                    // エラー時のフィードバック強化: HTTPエラーの場合
-                    const errorData = await response.json().catch(() => ({})); // エラーレスポンスがJSONでない場合も考慮
-                    throw new Error(`APIエラー (${response.status}): ${errorData.error ? errorData.error.message : '不明なエラー'}`);
+                // Flash系を抽出（audio, image, thinking, previewを除外）
+                let flashModels = models.filter(m => 
+                    m.includes('flash') && 
+                    !['audio', 'image', 'thinking', 'preview'].some(word => m.includes(word))
+                );
+
+                // もし安定版がなければPreviewも含める
+                if (flashModels.length === 0) {
+                    flashModels = models.filter(m => m.includes('flash') && !m.includes('thinking'));
                 }
 
-                const data = await response.json();
-
-                let translatedText = "翻訳できませんでした。";
-                if (data.candidates && data.candidates[0] && data.candidates[0].content && data.candidates[0].content.parts && data.candidates.length > 0) {
-                    translatedText = data.candidates[0].content.parts[0].text;
-                } else {
-                    // エラー時のフィードバック強化: 翻訳結果が空の場合
-                    translatedText = "翻訳結果が空でした。元のテキストを確認してください。";
-                }
-                
-                document.body.textContent = JSON.stringify({ translation: translatedText });
-
-            } catch (error) {
-                // エラー時のフィードバック強化: 全般的なエラーの場合
-                document.body.textContent = JSON.stringify({ error: `翻訳処理中にエラーが発生しました: ${error.message}` });
+                return flashModels.length > 0 ? flashModels[flashModels.length - 1] : "gemini-1.5-flash";
+            } catch (e) {
+                return "gemini-1.5-flash";
             }
         }
 
-        translateText();
+        async function translateText() {
+            if (!apiKey) return;
+            const input = document.getElementById('input').value;
+            const resultDiv = document.getElementById('result');
+            
+            statusDiv.textContent = "最適な最新モデルを探しています...";
+            const model = await getBestModel();
+            statusDiv.textContent = `使用中: ${model}`;
+
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Translate to Japanese. Result ONLY. No introduction.\n\n${input}` }] }],
+                        generationConfig: { temperature: 0.1 }
+                    })
+                });
+                const data = await response.json();
+                resultDiv.textContent = data.candidates[0].content.parts[0].text.trim();
+            } catch (e) {
+                resultDiv.textContent = "エラー: " + e.message;
+            }
+        }
     </script>
 </body>
 </html>
