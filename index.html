@@ -3,82 +3,121 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ジェミニ翻訳者2 - Debug Mode</title>
+    <title>Gemini 爆速翻訳機</title>
     <style>
-        body { font-family: sans-serif; padding: 20px; max-width: 600px; margin: auto; }
-        textarea { width: 100%; height: 100px; margin-top: 10px; border-radius: 8px; border: 1px solid #ccc; padding: 10px; }
-        button { width: 100%; padding: 12px; margin-top: 10px; background: #007aff; color: white; border: none; border-radius: 8px; font-weight: bold; }
-        #status { font-size: 12px; color: #666; margin-top: 10px; padding: 5px; border-bottom: 1px solid #eee; }
-        #result { margin-top: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px; white-space: pre-wrap; border: 1px solid #ddd; }
-        .error-msg { color: #d93025; background: #fce8e6; padding: 10px; border-radius: 5px; margin-top: 10px; font-size: 13px; }
+        :root { --primary: #007aff; --bg: #f5f5f7; }
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: var(--bg); padding: 20px; max-width: 600px; margin: auto; color: #1d1d1f; }
+        h2 { font-weight: 600; font-size: 22px; margin-bottom: 5px; }
+        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        #status { font-size: 12px; color: #86868b; margin-bottom: 12px; min-height: 18px; }
+        textarea { width: 100%; height: 120px; border: 1px solid #d2d2d7; border-radius: 12px; padding: 12px; font-size: 16px; line-height: 1.5; box-sizing: border-box; resize: none; outline: none; transition: border-color 0.2s; }
+        textarea:focus { border-color: var(--primary); }
+        button { width: 100%; padding: 14px; background: var(--primary); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; margin-top: 12px; transition: opacity 0.2s; -webkit-tap-highlight-color: transparent; }
+        button:active { opacity: 0.7; }
+        #result { background: white; padding: 16px; border-radius: 12px; border: 1px solid #e5e5e5; white-space: pre-wrap; font-size: 16px; line-height: 1.6; min-height: 60px; }
+        .error-card { background: #fff2f2; border: 1px solid #ffcfcf; color: #d70000; padding: 12px; border-radius: 8px; font-size: 13px; margin-top: 10px; }
     </style>
 </head>
 <body>
-    <h1>ジェミニ翻訳者2</h1>
-    <div id="status">APIキー読み込み中...</div>
-    
-    <textarea id="input" placeholder="ここに翻訳したい文章を入力..."></textarea>
-    <button onclick="translateText()">翻訳実行</button>
-    
-    <div id="result">結果がここに表示されます</div>
+
+    <h2>Gemini 翻訳</h2>
+    <div id="status">APIキーを確認中...</div>
+
+    <div class="card">
+        <textarea id="input" placeholder="翻訳したい文章を入力..."></textarea>
+        <button id="execBtn" onclick="translateText()">翻訳実行</button>
+    </div>
+
+    <div id="result">翻訳結果がここに表示されます</div>
 
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const apiKey = urlParams.get('key');
         const statusDiv = document.getElementById('status');
         const resultDiv = document.getElementById('result');
+        const execBtn = document.getElementById('execBtn');
 
+        // キーチェック
         if (!apiKey) {
-            statusDiv.innerHTML = "<b style='color:red;'>APIキーが見つかりません。?key=... を確認してください。</b>";
+            statusDiv.innerHTML = "<span style='color:red;'>⚠️ URLに ?key=YOUR_KEY がありません。</span>";
+            execBtn.disabled = true;
+            execBtn.style.background = "#ccc";
         } else {
-            statusDiv.textContent = "APIキー認識完了。準備OK！";
+            statusDiv.textContent = "Ready: 最新のFlashモデルを自動選別します";
+        }
+
+        async function getBestModel() {
+            try {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                const data = await response.json();
+                
+                if (data.error) throw new Error(data.error.message);
+
+                const models = data.models.map(m => m.name.replace('models/', ''));
+
+                // 【サクサク優先ルール】
+                // 1. "flash" を含み、重い/実験的/プレビュー版を除外
+                let flashModels = models.filter(m => 
+                    m.includes('flash') && 
+                    !['audio', 'image', 'thinking', 'preview', 'pro'].some(word => m.includes(word))
+                );
+
+                // 2. その中でも "lite" (最速) を最優先
+                let liteModels = flashModels.filter(m => m.includes('lite'));
+                
+                // 3. liteがあれば最新のliteを、なければ最新のflashを、それもなければ2.0-flash
+                let target = liteModels.length > 0 ? liteModels[liteModels.length - 1] : 
+                             (flashModels.length > 0 ? flashModels[flashModels.length - 1] : "gemini-2.0-flash-lite");
+
+                console.log("Selected Model:", target);
+                return target;
+            } catch (e) {
+                console.error("Model Selection Error:", e);
+                return "gemini-2.0-flash-lite"; // フォールバック
+            }
         }
 
         async function translateText() {
-            const input = document.getElementById('input').value;
-            if (!input) return;
+            const input = document.getElementById('input').value.trim();
+            if (!input || !apiKey) return;
 
-            statusDiv.textContent = "モデル収集中...";
+            // 状態リセット
+            resultDiv.style.color = "#1d1d1f";
+            resultDiv.textContent = "思考中...";
+            execBtn.disabled = true;
+
+            // モデル選別
+            statusDiv.textContent = "最適な最速モデルを探しています...";
+            const model = await getBestModel();
+            statusDiv.textContent = `使用モデル: ${model}`;
+
             try {
-                // モデルリストを取得
-                const mRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-                const mData = await mRes.json();
-                
-                if (mData.error) {
-                    throw new Error(`APIエラー: ${mData.error.message}`);
-                }
-
-                // 2.0-flash を最優先で探すロジック
-                const models = mData.models.map(m => m.name.replace('models/', ''));
-                const targetModel = models.find(m => m.includes('2.0-flash')) || 
-                                   models.find(m => m.includes('1.5-flash')) || 
-                                   "gemini-1.5-flash";
-
-                statusDiv.textContent = `使用モデル: ${targetModel}`;
-
-                // 翻訳リクエスト
-                const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: "Translate the following text to Japanese. Return ONLY the translated text.\n\n" + input }] }]
+                        contents: [{ parts: [{ text: `Translate the following text to Japanese. Result ONLY. No chat, no intro.\n\n${input}` }] }],
+                        generationConfig: { temperature: 0.1 }
                     })
                 });
 
-                const json = await res.json();
+                const json = await response.json();
 
                 if (json.error) {
-                    resultDiv.innerHTML = `<div class="error-msg">APIからのエラー回答: ${json.error.message}</div>`;
-                } else if (json.candidates && json.candidates[0].content) {
-                    resultDiv.textContent = json.candidates[0].content.parts[0].text.trim();
-                    statusDiv.textContent = "翻訳成功！";
-                } else {
-                    resultDiv.innerHTML = `<div class="error-msg">レスポンス形式が異常です。JSONを確認: ${JSON.stringify(json)}</div>`;
+                    throw new Error(json.error.message);
                 }
 
+                if (json.candidates && json.candidates[0].content) {
+                    resultDiv.textContent = json.candidates[0].content.parts[0].text.trim();
+                    statusDiv.textContent = `翻訳完了 (${model})`;
+                } else {
+                    throw new Error("レスポンスの形式が想定外です。");
+                }
             } catch (e) {
-                resultDiv.innerHTML = `<div class="error-msg">実行エラー: ${e.message}</div>`;
-                statusDiv.textContent = "エラー発生";
+                resultDiv.innerHTML = `<div class="error-card"><b>エラーが発生しました:</b><br>${e.message}</div>`;
+                statusDiv.textContent = "エラー終了";
+            } finally {
+                execBtn.disabled = false;
             }
         }
     </script>
