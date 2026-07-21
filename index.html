@@ -1,30 +1,25 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="ja" class="h-full bg-[#f5f5f7]">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemini 爆速翻訳機</title>
-    <!-- Tailwind CSS (Play CDN) -->
-    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Tailwind CSS v4 CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
     <style>
-        :root {
-            --primary: #007aff;
-            --primary-hover: #0063cc;
-            --bg: #f5f5f7;
-            --card: #ffffff;
-            --text: #1d1d1f;
-            --text-muted: #86868b;
-            --border: #d2d2d7;
-            --secondary-btn: #e8e8ed;
-        }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-            background-color: var(--bg);
-            color: var(--text);
+            font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        }
+        .font-mono {
+            font-family: "JetBrains Mono", monospace;
         }
     </style>
 </head>
-<body class="min-h-screen flex flex-col items-center pt-6 pb-12 px-4 select-none">
+<body class="min-h-full text-[#1d1d1f] flex flex-col items-center pt-6 pb-12 px-4 selection:bg-[#007aff]/20">
 
     <div class="w-full max-w-[600px] flex flex-col gap-4">
         
@@ -35,83 +30,110 @@
                     Gemini 翻訳
                 </h1>
                 <!-- ステータスバー -->
-                <div id="status" class="mt-1 flex items-center gap-1.5 text-[13px] text-[#86868b] font-mono">
+                <div id="status-container" class="mt-1 flex items-center gap-1.5 text-[13px] text-[#86868b]">
                     <span id="status-dot" class="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                    <span id="status-text">APIキーを確認中...</span>
+                    <span id="status" class="font-mono">APIキーを確認中...</span>
                 </div>
             </div>
         </header>
 
-        <!-- メインカード (入力) -->
         <main class="flex flex-col gap-4">
+            <!-- 入力カード -->
             <div class="bg-white rounded-[20px] shadow-[0_8px_24px_rgba(0,0,0,0.04)] border border-black/[0.02] p-5 flex flex-col gap-3">
                 
                 <!-- ツールバー -->
                 <div class="flex justify-end gap-2 -mb-1">
                     <!-- 貼り付けボタン -->
-                    <button 
-                        id="pasteBtn" 
-                        onclick="pasteText()" 
+                    <button
+                        id="pasteBtn"
+                        onclick="handlePaste()"
                         class="bg-[#e8e8ed] hover:bg-[#d8d8dd] text-[#1d1d1f] px-3 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors flex items-center gap-1 active:opacity-75"
+                        title="クリップボードから貼り付け"
                     >
-                        <span>📋</span> 貼り付け
+                        <span>📋</span>
+                        <span>貼り付け</span>
                     </button>
+
                     <!-- クリアボタン -->
-                    <button 
-                        id="clearBtn" 
-                        onclick="clearText()" 
-                        class="bg-[#e8e8ed] hover:bg-[#d8d8dd] text-[#1d1d1f] px-3 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors flex items-center gap-1 active:opacity-75 disabled:opacity-40 disabled:cursor-not-allowed"
+                    <button
+                        id="clearBtn"
+                        onclick="handleClear()"
                         disabled
+                        class="bg-[#e8e8ed] hover:bg-[#d8d8dd] text-[#1d1d1f] px-3 py-1.5 rounded-lg text-[13px] font-medium cursor-pointer transition-colors flex items-center gap-1 active:opacity-75 disabled:opacity-40 disabled:cursor-not-allowed"
+                        title="クリア"
                     >
-                        <span>🗑️</span> クリア
+                        <span>🗑️</span>
+                        <span>クリア</span>
                     </button>
                 </div>
 
                 <!-- テキストエリア -->
-                <div class="relative w-full">
-                    <textarea 
-                        id="input" 
-                        oninput="onInputText()"
-                        placeholder="翻訳したい文章を入力..." 
+                <div class="relative">
+                    <textarea
+                        id="input"
+                        oninput="handleInput()"
+                        placeholder="翻訳したい文章を入力..."
                         class="w-full h-[160px] border border-[#d2d2d7] rounded-xl p-3.5 text-base leading-relaxed outline-none transition-all duration-200 resize-none focus:border-[#007aff] focus:ring-4 focus:ring-[#007aff]/10"
                     ></textarea>
+                    
+                    <!-- 文字数カウント -->
+                    <div id="char-count" class="absolute bottom-3 right-3 text-[10px] text-[#86868b] font-mono bg-white/80 px-1 rounded hidden">
+                        0 文字
+                    </div>
                 </div>
 
-                <!-- エラー/お知らせ表示 -->
-                <div id="info-msg" class="hidden text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-100 flex items-start gap-1.5">
-                    <span class="mt-0.5 shrink-0">⚠️</span>
-                    <span id="info-msg-text"></span>
+                <!-- 貼り付けエラー等の簡易通知 -->
+                <div id="toast" class="hidden text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-100 flex items-start gap-1.5">
+                    <span>⚠️</span>
+                    <span id="toast-msg"></span>
                 </div>
 
                 <!-- 翻訳実行ボタン -->
-                <button 
-                    id="execBtn" 
-                    onclick="translateText()" 
+                <button
+                    id="execBtn"
+                    onclick="translateText()"
+                    disabled
                     class="w-full py-4 bg-[#007aff] hover:bg-[#0063cc] disabled:bg-[#ccc] disabled:shadow-none text-white font-semibold rounded-[14px] text-[17px] transition-all cursor-pointer disabled:cursor-not-allowed shadow-[0_4px_12px_rgba(0,122,255,0.2)] active:scale-[0.99] flex items-center justify-center gap-2"
                 >
-                    <span id="btn-icon">⚡</span>
-                    <span id="btn-text">翻訳実行</span>
+                    <span id="exec-icon">✨</span>
+                    <span id="exec-text">翻訳実行</span>
                 </button>
             </div>
 
-            <!-- 翻訳結果カード (初期状態は非表示) -->
+            <!-- エラー表示エリア -->
+            <div id="error-card" class="hidden bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-start gap-2.5 shadow-sm text-sm animate-fade-in">
+                <span class="text-red-500 shrink-0 mt-0.5">⚠️</span>
+                <div>
+                    <h4 class="font-semibold text-red-700 mb-0.5">エラーが発生しました</h4>
+                    <p id="error-msg"></p>
+                </div>
+            </div>
+
+            <!-- 翻訳結果カード -->
             <div id="result-card" class="hidden bg-white rounded-[20px] shadow-[0_8px_24px_rgba(0,0,0,0.04)] border border-black/[0.02] p-5 pt-4 flex flex-col gap-3">
+                <!-- 結果ヘッダー -->
                 <div class="text-xs font-bold uppercase tracking-wider text-[#86868b] flex justify-between items-center">
                     <div class="flex items-center gap-1">
                         <span>翻訳結果</span>
+                        <span class="text-[#86868b] mx-0.5">→</span>
                         <span class="text-[#007aff] bg-[#007aff]/10 px-1.5 py-0.5 rounded text-[10px] font-mono normal-case tracking-normal">Result ONLY</span>
                     </div>
+
                     <!-- コピーボタン -->
-                    <button 
-                        id="copyBtn" 
-                        onclick="copyResult()" 
+                    <button
+                        id="copyBtn"
+                        onclick="handleCopy()"
                         class="text-[#007aff] hover:text-[#0063cc] font-medium text-xs cursor-pointer transition-colors normal-case tracking-normal flex items-center gap-1"
                     >
-                        結果をコピー
+                        <span id="copy-text">結果をコピー</span>
                     </button>
                 </div>
-                <!-- 翻訳結果表示 -->
-                <div id="result" class="min-h-[120px] bg-[#fafafa] rounded-xl border border-[#e5e5e5] p-4 text-base leading-relaxed text-[#1d1d1f] break-words whitespace-pre-wrap">
+
+                <!-- 結果テキスト表示領域 -->
+                <div 
+                    id="result" 
+                    class="min-h-[120px] bg-[#fafafa] rounded-xl border border-[#e5e5e5] p-4 text-base leading-relaxed text-[#1d1d1f] break-words whitespace-pre-wrap"
+                >
                     翻訳結果がここに表示されます
                 </div>
             </div>
@@ -119,89 +141,164 @@
 
         <!-- フッター -->
         <footer class="mt-auto pt-12 text-[11px] text-[#86868b] font-mono text-center space-y-1">
-            <p>Gemini 爆速翻訳機 &copy; 2026</p>
+            <p>Gemini 爆速翻訳機 &copy; <span id="current-year"></span></p>
             <p class="text-[10px]">自動選別エンジン搭載 • 超低遅延Flash翻訳</p>
         </footer>
-
     </div>
 
+    <!-- 翻訳ロジック JavaScript -->
     <script>
+        document.getElementById('current-year').textContent = new Date().getFullYear();
+
         const urlParams = new URLSearchParams(window.location.search);
         const apiKey = urlParams.get('key');
-        const statusText = document.getElementById('status-text');
+        
+        const statusDiv = document.getElementById('status');
         const statusDot = document.getElementById('status-dot');
-        const resultDiv = document.getElementById('result');
-        const resultCard = document.getElementById('result-card');
         const execBtn = document.getElementById('execBtn');
         const clearBtn = document.getElementById('clearBtn');
         const inputArea = document.getElementById('input');
-        const infoMsg = document.getElementById('info-msg');
-        const infoMsgText = document.getElementById('info-msg-text');
-        const copyBtn = document.getElementById('copyBtn');
+        const charCount = document.getElementById('char-count');
+        const resultCard = document.getElementById('result-card');
+        const resultDiv = document.getElementById('result');
+        const errorCard = document.getElementById('error-card');
+        const errorMsg = document.getElementById('error-msg');
+        const toast = document.getElementById('toast');
+        const toastMsg = document.getElementById('toast-msg');
+        const copyText = document.getElementById('copy-text');
 
-        let selectedModel = "gemini-2.0-flash-lite";
+        let selectedModel = "gemini-2.5-flash"; // デフォルト
 
-        // APIキーの有無を確認
+        // 初期化時のキー確認
         if (!apiKey) {
-            statusText.innerHTML = "<span style='color:red;'>⚠️ URLに ?key=YOUR_KEY がありません。</span>";
-            statusDot.className = "w-2 h-2 rounded-full bg-red-500";
+            statusDiv.innerHTML = "<span style='color:#d70000;'>⚠️ URLに ?key=YOUR_KEY がありません。</span>";
+            statusDot.className = "w-2 h-2 rounded-full bg-red-500 animate-pulse";
             execBtn.disabled = true;
-            execBtn.style.background = "#ccc";
-            execBtn.style.cursor = "not-allowed";
         } else {
-            statusDot.className = "w-2 h-2 rounded-full bg-[#34c759]";
-            statusText.textContent = "Ready: 最適な最速モデルを自動選別します";
-            // 起動時に最適なモデルを選別
+            statusDiv.textContent = "Ready: 最新のFlashモデルを選別中...";
+            statusDot.className = "w-2 h-2 rounded-full bg-emerald-500";
+            // 爆速モデルの自動選別を開始
             getBestModel();
         }
 
         // 入力時の制御
-        function onInputText() {
-            const hasText = inputArea.value.trim().length > 0;
-            clearBtn.disabled = !hasText && !resultCard.classList.contains('hidden');
+        function handleInput() {
+            const length = inputArea.value.length;
+            if (length > 0) {
+                charCount.textContent = `${length} 文字`;
+                charCount.classList.remove('hidden');
+                if (apiKey) execBtn.disabled = false;
+                clearBtn.disabled = false;
+            } else {
+                charCount.classList.add('hidden');
+                execBtn.disabled = true;
+                if (!resultCard.classList.contains('hidden')) {
+                    clearBtn.disabled = false;
+                } else {
+                    clearBtn.disabled = true;
+                }
+            }
         }
 
-        // 最速モデルの自動選別
+        // クリップボード貼り付け
+        async function handlePaste() {
+            toast.classList.add('hidden');
+            try {
+                if (!navigator.clipboard || !navigator.clipboard.readText) {
+                    throw new Error("ブラウザのセキュリティ設定によりクリップボード読み取りが禁止されているか、未対応の環境です。");
+                }
+                const text = await navigator.clipboard.readText();
+                if (text) {
+                    inputArea.value = text;
+                    handleInput();
+                } else {
+                    showToast("クリップボードは空です。");
+                }
+            } catch (err) {
+                showToast("貼り付けに失敗しました。手動でペーストしてください。");
+            }
+        }
+
+        // 入力・出力のクリア
+        function handleClear() {
+            inputArea.value = "";
+            resultDiv.textContent = "";
+            resultCard.classList.add('hidden');
+            errorCard.classList.add('hidden');
+            toast.classList.add('hidden');
+            handleInput();
+        }
+
+        // コピーツール
+        async function handleCopy() {
+            const text = resultDiv.textContent;
+            if (!text) return;
+            try {
+                await navigator.clipboard.writeText(text);
+                copyText.textContent = "コピー完了";
+                copyText.classList.replace('text-[#007aff]', 'text-emerald-500');
+                setTimeout(() => {
+                    copyText.textContent = "結果をコピー";
+                    copyText.classList.replace('text-emerald-500', 'text-[#007aff]');
+                }, 2000);
+            } catch (err) {
+                showToast("コピーに失敗しました。");
+            }
+        }
+
+        // 簡易トースト通知表示
+        function showToast(msg) {
+            toastMsg.textContent = msg;
+            toast.classList.remove('hidden');
+            setTimeout(() => {
+                toast.classList.add('hidden');
+            }, 4000);
+        }
+
+        // モデルの自動選別
         async function getBestModel() {
             if (!apiKey) return;
             try {
                 const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-                const data = await response.json();
+                if (!response.ok) throw new Error("CORS or API Error");
                 
+                const data = await response.json();
                 if (data.error) throw new Error(data.error.message);
 
                 const models = data.models.map(m => m.name.replace('models/', ''));
 
-                // サクサク優先フィルタリング
+                // 1. "flash" を含み、重い/実験的/プレビュー版を除外
                 let flashModels = models.filter(m => 
                     m.includes('flash') && 
                     !['audio', 'image', 'thinking', 'preview', 'pro'].some(word => m.includes(word))
                 );
 
+                // 2. その中でも "lite" (最速) を最優先
                 let liteModels = flashModels.filter(m => m.includes('lite'));
                 
+                // 3. liteがあれば最新のliteを、なければ最新のflash
                 selectedModel = liteModels.length > 0 ? liteModels[liteModels.length - 1] : 
-                                (flashModels.length > 0 ? flashModels[flashModels.length - 1] : "gemini-2.0-flash-lite");
+                                 (flashModels.length > 0 ? flashModels[flashModels.length - 1] : "gemini-2.5-flash");
 
                 console.log("Selected Model:", selectedModel);
-                statusText.textContent = `Ready: ${selectedModel}`;
+                statusDiv.textContent = `使用モデル: ${selectedModel}`;
             } catch (e) {
-                console.error("Model Selection Error:", e);
-                selectedModel = "gemini-2.0-flash-lite"; // フォールバック
-                statusText.textContent = `Ready: ${selectedModel} (Fallback)`;
+                console.warn("Model query fallback:", e);
+                selectedModel = "gemini-2.5-flash"; // フォールバック
+                statusDiv.textContent = `使用モデル (自動): ${selectedModel}`;
             }
         }
 
-        // 翻訳実行
+        // 翻訳の実行
         async function translateText() {
             const input = inputArea.value.trim();
             if (!input || !apiKey) return;
 
-            // 状態リセット
+            // UI状態をローディングに更新
+            errorCard.classList.add('hidden');
             resultCard.classList.remove('hidden');
-            resultDiv.style.color = "#1d1d1f";
             resultDiv.innerHTML = `
-                <div class="flex flex-col gap-2 py-1">
+                <div class="flex flex-col gap-2 py-2">
                     <div class="h-4 bg-[#f5f5f7] rounded animate-pulse w-3/4"></div>
                     <div class="h-4 bg-[#f5f5f7] rounded animate-pulse w-5/6"></div>
                     <div class="h-4 bg-[#f5f5f7] rounded animate-pulse w-1/2"></div>
@@ -210,16 +307,11 @@
             `;
             
             execBtn.disabled = true;
-            document.getElementById('btn-text').textContent = "翻訳中...";
-            document.getElementById('btn-icon').textContent = "⏳";
-            statusText.textContent = "最適なモデルを探しています...";
-
-            // 最新のモデルを毎回走査して決定
-            const model = await getBestModel().then(() => selectedModel).catch(() => "gemini-2.0-flash-lite");
-            statusText.textContent = `使用モデル: ${model}`;
+            document.getElementById('exec-icon').innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
+            document.getElementById('exec-text').textContent = "翻訳を実行中...";
 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`, {
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -237,80 +329,21 @@
                 if (json.candidates && json.candidates[0].content) {
                     const resultText = json.candidates[0].content.parts[0].text.trim();
                     resultDiv.textContent = resultText;
-                    statusText.textContent = `翻訳完了 (${model})`;
-                    clearBtn.disabled = false;
+                    statusDiv.textContent = `翻訳完了 (${selectedModel})`;
                 } else {
-                    throw new Error("レスポンスの形式が想定外です。");
+                    throw new Error("想定外のレスポンス形式が返されました。");
                 }
             } catch (e) {
-                resultDiv.innerHTML = `<div class="bg-[#fff2f2] border border-[#ffcfcf] text-[#d70000] p-3.5 rounded-lg text-sm"><b>エラーが発生しました:</b><br>${e.message}</div>`;
-                statusText.textContent = "エラー終了";
+                resultCard.classList.add('hidden');
+                errorMsg.textContent = e.message;
+                errorCard.classList.remove('hidden');
+                statusDiv.textContent = "エラー終了";
             } finally {
                 execBtn.disabled = false;
-                document.getElementById('btn-text').textContent = "翻訳実行";
-                document.getElementById('btn-icon').textContent = "⚡";
+                document.getElementById('exec-icon').innerHTML = `✨`;
+                document.getElementById('exec-text').textContent = "翻訳実行";
+                handleInput();
             }
-        }
-
-        // テキスト貼り付け
-        async function pasteText() {
-            hideInfo();
-            try {
-                if (!navigator.clipboard || !navigator.clipboard.readText) {
-                    throw new Error("ブラウザのセキュリティ設定により、クリップボードAPIを使用できません。");
-                }
-                const text = await navigator.clipboard.readText();
-                if (text) {
-                    inputArea.value = text;
-                    clearBtn.disabled = false;
-                    onInputText();
-                } else {
-                    showInfo("クリップボードは空です。");
-                }
-            } catch (err) {
-                showInfo("貼り付けに失敗しました。手動で入力するか、ブラウザの権限を確認してください。");
-            }
-        }
-
-        // 翻訳結果をコピー
-        async function copyResult() {
-            const text = resultDiv.textContent.trim();
-            if (!text || text.includes("翻訳結果がここに表示されます") || text.includes("思考中...")) return;
-
-            try {
-                await navigator.clipboard.writeText(text);
-                copyBtn.textContent = "コピー完了 ✓";
-                copyBtn.classList.remove('text-[#007aff]');
-                copyBtn.classList.add('text-emerald-500');
-                
-                setTimeout(() => {
-                    copyBtn.textContent = "結果をコピー";
-                    copyBtn.classList.remove('text-emerald-500');
-                    copyBtn.classList.add('text-[#007aff]');
-                }, 2000);
-            } catch (err) {
-                console.error("Failed to copy:", err);
-            }
-        }
-
-        // クリア
-        function clearText() {
-            inputArea.value = "";
-            resultDiv.textContent = "翻訳結果がここに表示されます";
-            resultCard.classList.add('hidden');
-            clearBtn.disabled = true;
-            hideInfo();
-        }
-
-        // インフォメーション表示用ユーティリティ
-        function showInfo(msg) {
-            infoMsgText.textContent = msg;
-            infoMsg.classList.remove('hidden');
-            setTimeout(hideInfo, 4000);
-        }
-
-        function hideInfo() {
-            infoMsg.classList.add('hidden');
         }
     </script>
 </body>
