@@ -20,7 +20,7 @@
     </style>
 </head>
 <body class="min-h-full text-[#1d1d1f] flex flex-col items-center pt-6 pb-12 px-4 selection:bg-[#007aff]/20">
-
+ 
     <div class="w-full max-w-[600px] flex flex-col gap-4">
         
         <!-- ヘッダーエリア -->
@@ -36,7 +36,7 @@
                 </div>
             </div>
         </header>
-
+ 
         <main class="flex flex-col gap-4">
             <!-- 入力カード -->
             <div class="bg-white rounded-[20px] shadow-[0_8px_24px_rgba(0,0,0,0.04)] border border-black/[0.02] p-5 flex flex-col gap-3">
@@ -53,7 +53,7 @@
                         <span>📋</span>
                         <span>貼り付け</span>
                     </button>
-
+ 
                     <!-- クリアボタン -->
                     <button
                         id="clearBtn"
@@ -66,7 +66,7 @@
                         <span>クリア</span>
                     </button>
                 </div>
-
+ 
                 <!-- テキストエリア -->
                 <div class="relative">
                     <textarea
@@ -81,13 +81,13 @@
                         0 文字
                     </div>
                 </div>
-
+ 
                 <!-- 貼り付けエラー等の簡易通知 -->
                 <div id="toast" class="hidden text-xs text-amber-600 bg-amber-50 p-2.5 rounded-lg border border-amber-100 flex items-start gap-1.5">
                     <span>⚠️</span>
                     <span id="toast-msg"></span>
                 </div>
-
+ 
                 <!-- 翻訳実行ボタン -->
                 <button
                     id="execBtn"
@@ -99,7 +99,7 @@
                     <span id="exec-text">翻訳実行</span>
                 </button>
             </div>
-
+ 
             <!-- エラー表示エリア -->
             <div id="error-card" class="hidden bg-red-50 border border-red-100 text-red-600 p-4 rounded-xl flex items-start gap-2.5 shadow-sm text-sm animate-fade-in">
                 <span class="text-red-500 shrink-0 mt-0.5">⚠️</span>
@@ -108,7 +108,7 @@
                     <p id="error-msg"></p>
                 </div>
             </div>
-
+ 
             <!-- 翻訳結果カード -->
             <div id="result-card" class="hidden bg-white rounded-[20px] shadow-[0_8px_24px_rgba(0,0,0,0.04)] border border-black/[0.02] p-5 pt-4 flex flex-col gap-3">
                 <!-- 結果ヘッダー -->
@@ -118,7 +118,7 @@
                         <span class="text-[#86868b] mx-0.5">→</span>
                         <span class="text-[#007aff] bg-[#007aff]/10 px-1.5 py-0.5 rounded text-[10px] font-mono normal-case tracking-normal">Result ONLY</span>
                     </div>
-
+ 
                     <!-- コピーボタン -->
                     <button
                         id="copyBtn"
@@ -128,7 +128,7 @@
                         <span id="copy-text">結果をコピー</span>
                     </button>
                 </div>
-
+ 
                 <!-- 結果テキスト表示領域 -->
                 <div 
                     id="result" 
@@ -138,21 +138,23 @@
                 </div>
             </div>
         </main>
-
+ 
         <!-- フッター -->
         <footer class="mt-auto pt-12 text-[11px] text-[#86868b] font-mono text-center space-y-1">
             <p>Gemini 爆速翻訳機 &copy; <span id="current-year"></span></p>
             <p class="text-[10px]">自動選別エンジン搭載 • 超低遅延Flash翻訳</p>
         </footer>
     </div>
-
+ 
     <!-- 翻訳ロジック JavaScript -->
     <script>
         document.getElementById('current-year').textContent = new Date().getFullYear();
-
+ 
+        // URLの ?key=... からAPIキーを取得(ブックマーク運用のため、あえてこの方式を採用)
+        // ※Googleへ送信する際はヘッダー方式に変換するので、Google側の認証仕様変更の影響は受けない
         const urlParams = new URLSearchParams(window.location.search);
         const apiKey = urlParams.get('key');
-        
+ 
         const statusDiv = document.getElementById('status');
         const statusDot = document.getElementById('status-dot');
         const execBtn = document.getElementById('execBtn');
@@ -166,9 +168,19 @@
         const toast = document.getElementById('toast');
         const toastMsg = document.getElementById('toast-msg');
         const copyText = document.getElementById('copy-text');
-
-        let selectedModel = "gemini-2.5-flash"; // デフォルト
-
+ 
+        // フォールバックも安価な lite 系に統一
+        let selectedModel = "gemini-2.5-flash-lite";
+ 
+        // 翻訳以外の用途向け派生モデルを確実に除外するためのブロックリスト
+        // (音声合成/画像/埋め込み/文字起こし/実験系ツールなど)
+        const EXCLUDE_KEYWORDS = [
+            'audio', 'image', 'thinking', 'preview', 'pro',
+            'tts', 'embedding', 'transcribe', 'aqa', 'veo', 'lyria',
+            'computer-use', 'robotics', 'antigravity', 'deep-research',
+            'gemma', 'omni', 'nano-banana'
+        ];
+ 
         // 初期化時のキー確認
         if (!apiKey) {
             statusDiv.innerHTML = "<span style='color:#d70000;'>⚠️ URLに ?key=YOUR_KEY がありません。</span>";
@@ -180,7 +192,7 @@
             // 爆速モデルの自動選別を開始
             getBestModel();
         }
-
+ 
         // 入力時の制御
         function handleInput() {
             const length = inputArea.value.length;
@@ -199,7 +211,7 @@
                 }
             }
         }
-
+ 
         // クリップボード貼り付け
         async function handlePaste() {
             toast.classList.add('hidden');
@@ -218,7 +230,7 @@
                 showToast("貼り付けに失敗しました。手動でペーストしてください。");
             }
         }
-
+ 
         // 入力・出力のクリア
         function handleClear() {
             inputArea.value = "";
@@ -228,7 +240,7 @@
             toast.classList.add('hidden');
             handleInput();
         }
-
+ 
         // コピーツール
         async function handleCopy() {
             const text = resultDiv.textContent;
@@ -245,7 +257,7 @@
                 showToast("コピーに失敗しました。");
             }
         }
-
+ 
         // 簡易トースト通知表示
         function showToast(msg) {
             toastMsg.textContent = msg;
@@ -254,46 +266,49 @@
                 toast.classList.add('hidden');
             }, 4000);
         }
-
+ 
         // モデルの自動選別
         async function getBestModel() {
             if (!apiKey) return;
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+                // ★修正: ?key= クエリではなく x-goog-api-key ヘッダーで認証
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models`, {
+                    headers: { 'x-goog-api-key': apiKey }
+                });
                 if (!response.ok) throw new Error("CORS or API Error");
                 
                 const data = await response.json();
                 if (data.error) throw new Error(data.error.message);
-
+ 
                 const models = data.models.map(m => m.name.replace('models/', ''));
-
-                // 1. "flash" を含み、重い/実験的/プレビュー版を除外
+ 
+                // 1. "flash" を含み、翻訳に使えない派生モデルを除外
                 let flashModels = models.filter(m => 
                     m.includes('flash') && 
-                    !['audio', 'image', 'thinking', 'preview', 'pro'].some(word => m.includes(word))
+                    !EXCLUDE_KEYWORDS.some(word => m.includes(word))
                 );
-
+ 
                 // 2. その中でも "lite" (最速) を最優先
                 let liteModels = flashModels.filter(m => m.includes('lite'));
                 
                 // 3. liteがあれば最新のliteを、なければ最新のflash
                 selectedModel = liteModels.length > 0 ? liteModels[liteModels.length - 1] : 
-                                 (flashModels.length > 0 ? flashModels[flashModels.length - 1] : "gemini-2.5-flash");
-
+                                 (flashModels.length > 0 ? flashModels[flashModels.length - 1] : "gemini-2.5-flash-lite");
+ 
                 console.log("Selected Model:", selectedModel);
                 statusDiv.textContent = `使用モデル: ${selectedModel}`;
             } catch (e) {
                 console.warn("Model query fallback:", e);
-                selectedModel = "gemini-2.5-flash"; // フォールバック
+                selectedModel = "gemini-2.5-flash-lite"; // フォールバック
                 statusDiv.textContent = `使用モデル (自動): ${selectedModel}`;
             }
         }
-
+ 
         // 翻訳の実行
         async function translateText() {
             const input = inputArea.value.trim();
             if (!input || !apiKey) return;
-
+ 
             // UI状態をローディングに更新
             errorCard.classList.add('hidden');
             resultCard.classList.remove('hidden');
@@ -309,23 +324,27 @@
             execBtn.disabled = true;
             document.getElementById('exec-icon').innerHTML = `<svg class="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>`;
             document.getElementById('exec-text').textContent = "翻訳を実行中...";
-
+ 
             try {
-                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`, {
+                // ★修正: ?key= クエリではなく x-goog-api-key ヘッダーで認証
+                const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-goog-api-key': apiKey
+                    },
                     body: JSON.stringify({
-                        contents: [{ parts: [{ text: `Translate the following text to Japanese. Result ONLY. No chat, no intro.\n\n${input}` }] }],
-                        generationConfig: { temperature: 0.1 }
+                        contents: [{ parts: [{ text: `Translate the following text to Japanese. Result ONLY. No chat, no intro.\n\n${input}` }] }]
+                        // ※temperatureは新しいモデル系統だとエラーの原因になり得るため削除
                     })
                 });
-
+ 
                 const json = await response.json();
-
+ 
                 if (json.error) {
                     throw new Error(json.error.message);
                 }
-
+ 
                 if (json.candidates && json.candidates[0].content) {
                     const resultText = json.candidates[0].content.parts[0].text.trim();
                     resultDiv.textContent = resultText;
@@ -348,3 +367,4 @@
     </script>
 </body>
 </html>
+ 
